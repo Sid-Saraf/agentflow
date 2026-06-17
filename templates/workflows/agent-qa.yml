@@ -1,0 +1,50 @@
+name: Agent QA
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  qa:
+    if: github.event.label.name == 'ready-for-qa'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: agent/issue-${{ github.event.issue.number }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install openai python-dotenv
+          git clone https://github.com/Sid-Saraf/agentflow.git /tmp/agentflow
+          # Install project dependencies if they exist
+          [ -f requirements.txt ] && pip install -r requirements.txt || true
+          [ -f package.json ] && npm ci || true
+
+      - name: Run QA agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python /tmp/agentflow/agents/qa_agent.py
+
+      - name: Mark needs-human on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label needs-human \
+            --remove-label qa-in-progress

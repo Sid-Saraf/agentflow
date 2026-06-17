@@ -1,0 +1,52 @@
+name: Agent Builder
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  build:
+    if: github.event.label.name == 'ready-for-build'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install agentflow
+        run: |
+          pip install openai python-dotenv
+          git clone https://github.com/Sid-Saraf/agentflow.git /tmp/agentflow
+
+      - name: Configure git
+        run: |
+          git config user.name "Agent Builder"
+          git config user.email "agent@noreply.github.com"
+
+      - name: Run builder agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python /tmp/agentflow/agents/builder_agent.py
+
+      - name: Mark needs-human on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label needs-human \
+            --remove-label build-in-progress \
+            --remove-label ready-for-build

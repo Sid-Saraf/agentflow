@@ -11,7 +11,6 @@ import sys
 import json
 import subprocess
 from pathlib import Path
-from openai import OpenAI
 from base import gh, bash, read_file, list_files, gpt
 
 REPO_ROOT = Path(os.environ.get("GITHUB_WORKSPACE", "."))

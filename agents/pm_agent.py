@@ -73,33 +73,16 @@ def read_codebase(path: str = ".") -> str:
     return content
 
 
-def create_epic_and_issues(epic: dict, repo: str) -> list[str]:
-    urls = []
-    # Create the epic issue first
-    epic_url = gh(
-        f'issue create --repo {repo} '
-        f'--title "{epic["title"]}" '
-        f'--body "{epic["description"]}" '
-        f'--label "epic"'
-    )
+def create_epic_and_issues(epic: dict, repo: str) -> None:
+    epic_url = gh(f'issue create --repo {repo} --title "{epic["title"]}" --body "{epic["description"]}" --label "epic"')
     print(f"  Epic: {epic_url}")
 
     for issue in epic["issues"]:
-        labels = ",".join(issue.get("labels", ["ready-for-build"]))
         estimate = issue.get("estimate", "M")
-        body = issue["body"] + f"\n\n**Estimate:** {estimate}\n**Part of:** {epic['title']}"
-        body_escaped = body.replace('"', "'")
-
-        url = gh(
-            f'issue create --repo {repo} '
-            f'--title "{issue["title"]}" '
-            f'--body "{body_escaped}" '
-            f'--label "{labels}"'
-        )
+        body = (issue["body"] + f"\n\n**Estimate:** {estimate}\n**Part of:** {epic['title']}").replace('"', "'")
+        labels = ",".join(issue.get("labels", ["ready-for-build"]))
+        url = gh(f'issue create --repo {repo} --title "{issue["title"]}" --body "{body}" --label "{labels}"')
         print(f"    Issue ({estimate}): {url}")
-        urls.append(url)
-
-    return urls
 
 
 def main():

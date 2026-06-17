@@ -11,8 +11,7 @@ import sys
 import json
 import subprocess
 from pathlib import Path
-from openai import OpenAI
-from base import gh, git, bash, read_file, write_file, list_files, gpt
+from base import gh, bash, read_file, write_file, list_files, gpt, _get_client
 
 REPO_ROOT = Path(os.environ.get("GITHUB_WORKSPACE", "."))
 
@@ -77,9 +76,21 @@ def dispatch(name: str, args: dict) -> str:
     return f"Unknown: {name}"
 
 
+def _run_loop(client, messages: list, max_turns: int) -> None:
+    for _ in range(max_turns):
+        resp = client.chat.completions.create(model="gpt-4o", max_tokens=4096, tools=tools, messages=messages)
+        msg = resp.choices[0].message
+        messages.append(msg)
+        if not msg.tool_calls:
+            break
+        results = [{"role": "tool", "tool_call_id": c.id, "content": dispatch(c.function.name, json.loads(c.function.arguments))}
+                   for c in msg.tool_calls]
+        messages.extend(results)
+
+
 def run_ponytail_check() -> str:
     """Check the current diff for over-engineering."""
-    _, diff = bash("git diff HEAD", cwd=str(REPO_ROOT))
+    _, diff = bash("git diff HEAD~1", cwd=str(REPO_ROOT))
     if not diff.strip():
         return "clean"
     raw = gpt("You are a code reviewer focused on over-engineering.",
@@ -93,7 +104,7 @@ def run_ponytail_check() -> str:
 
 
 def implement(issue_number: str, title: str, body: str) -> bool:
-    client = OpenAI()
+    client = _get_client()
     branch = f"agent/issue-{issue_number}"
     bash(f"git checkout -b {branch}", cwd=str(REPO_ROOT))
     gh(f"issue edit {issue_number} --add-label build-in-progress --remove-label ready-for-build")
@@ -103,51 +114,20 @@ def implement(issue_number: str, title: str, body: str) -> bool:
         {"role": "user", "content": f"Implement issue #{issue_number}: {title}\n\n{body}\n\nStart by listing files, then read the relevant ones, implement, test, commit."},
     ]
 
-    for turn in range(50):
-        resp = client.chat.completions.create(model="gpt-4o", max_tokens=4096, tools=tools, messages=messages)
-        msg = resp.choices[0].message
-        messages.append(msg)
-
-        if msg.content:
-            print(f"[{turn+1}] {msg.content[:150]}")
-
-        if not msg.tool_calls:
-            break
-
-        results = []
-        for call in msg.tool_calls:
-            args = json.loads(call.function.arguments)
-            print(f"  → {call.function.name}({str(args)[:60]})")
-            result = dispatch(call.function.name, args)
-            print(f"     {result[:100]}")
-            results.append({"role": "tool", "tool_call_id": call.id, "content": result})
-        messages.extend(results)
+    _run_loop(client, messages, max_turns=50)
 
     # Ponytail check
     print("\n[Ponytail] Checking for over-engineering...")
     ponytail_result = run_ponytail_check()
     if ponytail_result != "clean":
         print(ponytail_result)
-        # Ask agent to fix it
-        messages.append({"role": "user", "content": f"Ponytail found over-engineering issues. Please fix them:\n{ponytail_result}"})
-        for turn in range(15):
-            resp = client.chat.completions.create(model="gpt-4o", max_tokens=4096, tools=tools, messages=messages)
-            msg = resp.choices[0].message
-            messages.append(msg)
-            if not msg.tool_calls:
-                break
-            results = []
-            for call in msg.tool_calls:
-                args = json.loads(call.function.arguments)
-                result = dispatch(call.function.name, args)
-                results.append({"role": "tool", "tool_call_id": call.id, "content": result})
-            messages.extend(results)
+        messages.append({"role": "user", "content": f"Ponytail found over-engineering. Fix:\n{ponytail_result}"})
+        _run_loop(client, messages, max_turns=15)
     else:
         print("[Ponytail] Clean ✓")
 
     # Check if anything was committed
-    status = bash("git status --short", cwd=str(REPO_ROOT))[1]
-    if not status.strip() and "nothing to commit" in bash("git status", cwd=str(REPO_ROOT))[1]:
+    if not bash("git status --short", cwd=str(REPO_ROOT))[1].strip():
         gh(f"issue edit {issue_number} --add-label needs-human --remove-label build-in-progress")
         gh(f'issue comment {issue_number} --body "Builder agent made no changes. Needs human review."')
         return False

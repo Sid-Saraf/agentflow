@@ -65,11 +65,6 @@ def gh(cmd: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
-def git(cmd: str, cwd: str | None = None) -> str:
-    result = subprocess.run(f"git {cmd}", shell=True, capture_output=True, text=True, cwd=cwd)
-    return result.stdout.strip()
-
-
 def bash(cmd: str, cwd: str | None = None, timeout: int = 120) -> tuple[int, str]:
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd, timeout=timeout)
     output = result.stdout + ("\nSTDERR: " + result.stderr if result.stderr else "")

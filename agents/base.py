@@ -7,9 +7,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load .env from the agentflow repo root, then from CWD (target project)
-load_dotenv(Path(__file__).parent.parent / ".env")
-load_dotenv()
+# Search for .env in: agentflow root, CWD, CWD/backend, parent dirs
+for _env in [
+    Path(__file__).parent.parent / ".env",   # agentflow/.env
+    Path.cwd() / ".env",                      # project root
+    Path.cwd() / "backend" / ".env",          # project/backend/.env
+    Path.home() / ".env",                     # ~/.env fallback
+]:
+    if _env.exists():
+        load_dotenv(_env)
 
 client = OpenAI()
 MODEL = os.environ.get("AGENT_MODEL", "gpt-4o")

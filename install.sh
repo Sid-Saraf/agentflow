@@ -11,6 +11,9 @@ if [ -z "$REPO" ]; then
   exit 1
 fi
 
+# Resolve agentflow root regardless of where script is called from
+AGENTFLOW_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "Installing agentflow into $REPO..."
 
 # Clone target repo
@@ -20,8 +23,8 @@ cd "$TMP/target"
 
 # Copy workflows
 mkdir -p .github/workflows
-cp "$(dirname "$0")/templates/workflows/agent-builder.yml" .github/workflows/
-cp "$(dirname "$0")/templates/workflows/agent-qa.yml" .github/workflows/
+cp "$AGENTFLOW_DIR/templates/workflows/agent-builder.yml" .github/workflows/
+cp "$AGENTFLOW_DIR/templates/workflows/agent-qa.yml" .github/workflows/
 
 # Commit and push
 git config user.name "agentflow"
@@ -33,7 +36,7 @@ git push
 # Create labels
 python3 -c "
 import sys
-sys.path.insert(0, '$(dirname "$0")/agents')
+sys.path.insert(0, '$AGENTFLOW_DIR/agents')
 from base import ensure_labels
 ensure_labels('$REPO')
 "

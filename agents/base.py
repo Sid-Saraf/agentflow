@@ -9,19 +9,27 @@ from openai import OpenAI
 
 # Search for .env in: agentflow root, CWD, CWD/backend, parent dirs
 for _env in [
-    Path(__file__).parent.parent / ".env",   # agentflow/.env
-    Path.cwd() / ".env",                      # project root
-    Path.cwd() / "backend" / ".env",          # project/backend/.env
-    Path.home() / ".env",                     # ~/.env fallback
+    Path(__file__).parent.parent / ".env",
+    Path.cwd() / ".env",
+    Path.cwd() / "backend" / ".env",
+    Path.home() / ".env",
 ]:
     if _env.exists():
         load_dotenv(_env)
 
-client = OpenAI()
 MODEL = os.environ.get("AGENT_MODEL", "gpt-4o")
+_client: OpenAI | None = None
+
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        _client = OpenAI()
+    return _client
 
 
 def gpt(system: str, user: str, json_mode: bool = False, max_tokens: int = 4000) -> str:
+    client = _get_client()
     kwargs = {}
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
@@ -36,6 +44,7 @@ def gpt(system: str, user: str, json_mode: bool = False, max_tokens: int = 4000)
 
 def gpt_stream(system: str, messages: list) -> str:
     """Streaming chat for conversational agents."""
+    client = _get_client()
     full = ""
     with client.chat.completions.stream(
         model=MODEL,
